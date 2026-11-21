@@ -1,0 +1,336 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 스마트 안경 앱 - 카메라 테스트판</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; }
+    .card {
+      position: relative;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    h1 { margin: 0 0 6px; font-size: 1.3rem; color: #0369a1; }
+    .cam-box {
+      position: relative;
+      width: 100%;
+      height: 240px;
+      background: #0f172a;
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    video#liveCam {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+    canvas#demoCam {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .hud {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      background: rgba(15, 23, 42, 0.88);
+      color: #38bdf8;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      z-index: 5;
+    }
+    .shield {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 241, 242, 0.97);
+      color: #be123c;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 16px;
+      z-index: 20;
+      font-weight: 700;
+    }
+    .shield.on { display: flex; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+    button, input, select {
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.88rem;
+      border: 1px solid #cbd5e1;
+    }
+    button { border: none; font-weight: 700; cursor: pointer; background: #0284c7; color: #fff; }
+    button.red { background: #e11d48; }
+    button.gray { background: #e2e8f0; color: #0f172a; }
+    input, select { background: #f8fafc; color: #0f172a; }
+    textarea {
+      width: 100%;
+      min-height: 85px;
+      border-radius: 10px;
+      border: 1px solid #cbd5e1;
+      padding: 10px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      margin-top: 8px;
+    }
+    .status-note {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      font-size: 0.85rem;
+      color: #334155;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>👓 AI 스마트 안경 앱 — 카메라 &amp; 화장실 프라이버시</h1>
+      <div class="cam-box">
+        <video id="liveCam" autoplay playsinline muted></video>
+        <canvas id="demoCam" width="640" height="240"></canvas>
+        <div id="hud" class="hud">렌즈 HUD: 대기 중</div>
+        <div id="shield" class="shield">
+          <div style="font-size:2rem;">🛡️</div>
+          <div>화장실 감지 — 카메라 &amp; 번역 차단됨</div>
+          <button class="gray" style="margin-top:10px;" onclick="unlockToilet()">보호 해제</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <button onclick="turnOnCam()">📷 실제 카메라 켜기</button>
+        <button class="gray" onclick="turnOffCam()">⏹️ 카메라 끄기</button>
+        <button class="gray" onclick="setZone('거실', 24)">🛋️ 거실 (24°C)</button>
+        <button class="gray" onclick="setZone('화장실', 19)">🚽 화장실 (19°C)</button>
+        <button class="red" onclick="learnToilet()">🧠 화장실 온도 학습</button>
+      </div>
+      <div id="camNote" class="status-note">카메라 상태: 렌즈 미리보기 표시 중 ([실제 카메라 켜기]를 누르면 웹캠 연결을 시도합니다)</div>
+    </div>
+
+    <div class="card">
+      <strong>🌐 번역 텍스트 창 (언어 전환)</strong>
+      <div class="row">
+        <select id="langSel" onchange="runTr()">
+          <option value="ko" selected>한국어 (KO)</option>
+          <option value="en">영어 (EN)</option>
+          <option value="ja">일본어 (JA)</option>
+          <option value="zh-CN">중국어 (ZH)</option>
+        </select>
+        <button class="gray" onclick="pickSample('Please watch your step. Exit is on the left.')">영어 샘플</button>
+        <button class="gray" onclick="pickSample('足元にご注意ください。出口は左側です。')">일본어 샘플</button>
+        <button class="gray" onclick="pickSample('请注意脚下。出口在左边。')">중국어 샘플</button>
+      </div>
+      <textarea id="srcArea" placeholder="문장을 입력하거나 샘플을 누르세요" oninput="runTr()"></textarea>
+      <textarea id="dstArea" readonly placeholder="번역 결과"></textarea>
+    </div>
+
+    <div class="card">
+      <strong>🗺️ 지도 &amp; 🛍️ 물건 검색 &amp; 🔊 음성</strong>
+      <div class="row">
+        <input id="searchBox" type="text" style="flex:1; min-width:200px;" placeholder="장소 또는 물건 이름 입력 (예: 순창군청, 텀블러)" onkeydown="if(event.key==='Enter') runSearch()" />
+        <button onclick="runSearch()">검색하기</button>
+        <button class="gray" onclick="speakOut()">🔊 음성 읽기</button>
+      </div>
+      <div id="searchResult" class="status-note">검색 결과가 여기에 표시됩니다.</div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      let zoneName = '거실';
+      let tempC = 24;
+      let learnedBath = null;
+      let isBlocked = false;
+      let mediaStream = null;
+      let lastSpeech = '';
+
+      const DICT = [
+        {
+          keys: ['please watch your step. exit is on the left.', '足元にご注意ください。出口は左側です。', '请注意脚下。出口在左边。', '발밑을 조심하세요. 출구는 왼쪽에 있습니다.'],
+          ko: '발밑을 조심하세요. 출구는 왼쪽에 있습니다.',
+          en: 'Please watch your step. Exit is on the left.',
+          ja: '足元にご注意ください。出口は左側です。',
+          'zh-CN': '请注意脚下。出口在左边。'
+        }
+      ];
+
+      function drawLensDemo() {
+        const canvas = document.getElementById('demoCam');
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+        ctx.lineWidth = 1;
+        for (let x = 40; x < canvas.width; x += 40) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+        }
+        for (let y = 40; y < canvas.height; y += 40) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+        }
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = 'bold 18px sans-serif';
+        ctx.fillText(`스마트 안경 렌즈 뷰 (${zoneName} · ${tempC}°C)`, 24, 42);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '14px sans-serif';
+        ctx.fillText('실제 카메라가 연결되지 않았거나 대기 중일 때 표시되는 렌즈 화면입니다.', 24, 68);
+      }
+
+      function refreshPrivacy() {
+        isBlocked = (learnedBath !== null && Math.abs(tempC - learnedBath) <= 2.5);
+        document.getElementById('shield').classList.toggle('on', isBlocked);
+        if (isBlocked) {
+          document.getElementById('hud').textContent = '렌즈 HUD: 화장실 보호 모드 — 차단됨';
+          document.getElementById('dstArea').value = '';
+          if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        }
+        drawLensDemo();
+      }
+
+      window.turnOnCam = async function () {
+        const note = document.getElementById('camNote');
+        const vid = document.getElementById('liveCam');
+        const demo = document.getElementById('demoCam');
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          note.textContent = '카메라 상태: 이 브라우저에서 getUserMedia를 지원하지 않아 렌즈 화면으로 표시됩니다.';
+          return;
+        }
+
+        try {
+          const st = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+          mediaStream = st;
+          vid.srcObject = st;
+          vid.style.display = 'block';
+          demo.style.display = 'none';
+          note.textContent = '카메라 상태: 실제 카메라 연결됨 (ON)';
+        } catch (err) {
+          vid.style.display = 'none';
+          demo.style.display = 'block';
+          const code = (err && err.name) || 'UnknownError';
+          note.textContent = `카메라 상태: 연결 실패 (${code}) — 브라우저 권한이나 카메라 연결을 확인해 주세요. 렌즈 화면은 정상 작동합니다.`;
+        }
+      };
+
+      window.turnOffCam = function () {
+        if (mediaStream) {
+          mediaStream.getTracks().forEach(t => t.stop());
+          mediaStream = null;
+        }
+        document.getElementById('liveCam').style.display = 'none';
+        document.getElementById('demoCam').style.display = 'block';
+        document.getElementById('camNote').textContent = '카메라 상태: 꺼짐 (렌즈 미리보기 표시 중)';
+      };
+
+      window.setZone = function (name, t) {
+        zoneName = name;
+        tempC = t;
+        refreshPrivacy();
+      };
+
+      window.learnToilet = function () {
+        learnedBath = tempC;
+        refreshPrivacy();
+        document.getElementById('camNote').textContent = `화장실 온도(${learnedBath}°C) 학습 완료! 같은 온도 구역에서 자동 차단됩니다.`;
+      };
+
+      window.unlockToilet = function () {
+        learnedBath = null;
+        zoneName = '거실';
+        tempC = 24;
+        refreshPrivacy();
+      };
+
+      window.pickSample = function (text) {
+        if (isBlocked) return;
+        document.getElementById('srcArea').value = text;
+        runTr();
+      };
+
+      window.runTr = async function () {
+        if (isBlocked) return;
+        const raw = document.getElementById('srcArea').value.trim();
+        const lang = document.getElementById('langSel').value;
+        const out = document.getElementById('dstArea');
+        if (!raw) { out.value = ''; return; }
+
+        const lower = raw.toLowerCase();
+        for (const item of DICT) {
+          if (item.keys.some(k => k.toLowerCase() === lower) && item[lang]) {
+            out.value = item[lang];
+            document.getElementById('hud').textContent = `렌즈 HUD [${lang}]: ${item[lang]}`;
+            lastSpeech = item[lang];
+            return;
+          }
+        }
+
+        try {
+          const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(raw)}&langpair=${encodeURIComponent('autodetect|' + lang)}`;
+          const res = await fetch(url);
+          const data = await res.json();
+          const tr = (data && data.responseData && data.responseData.translatedText) || raw;
+          out.value = tr;
+          document.getElementById('hud').textContent = `렌즈 HUD [${lang}]: ${tr}`;
+          lastSpeech = tr;
+        } catch (_) {
+          out.value = `[${lang}] ${raw}`;
+          document.getElementById('hud').textContent = `렌즈 HUD [${lang}]: ${raw}`;
+          lastSpeech = raw;
+        }
+      };
+
+      window.runSearch = function () {
+        if (isBlocked) return;
+        const q = (document.getElementById('searchBox').value || '').trim();
+        if (!q) return;
+        const enc = encodeURIComponent(q);
+        document.getElementById('searchResult').innerHTML =
+          `<strong>"${q}"</strong> 검색 링크: ` +
+          `<a href="https://www.google.com/maps/search/?api=1&query=${enc}" target="_blank" rel="noopener">지도에서 보기</a> · ` +
+          `<a href="https://search.shopping.naver.com/search/all?query=${enc}" target="_blank" rel="noopener">네이버 쇼핑</a> · ` +
+          `<a href="https://www.coupang.com/np/search?q=${enc}" target="_blank" rel="noopener">쿠팡</a>`;
+        lastSpeech = `${q} 지도 및 상품 검색 결과를 준비했습니다.`;
+      };
+
+      window.speakOut = function () {
+        if (isBlocked || !lastSpeech) return;
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(lastSpeech);
+          u.lang = 'ko-KR';
+          window.speechSynthesis.speak(u);
+        }
+      };
+
+      refreshPrivacy();
+    })();
+  </script>
+</body>
+</html>
